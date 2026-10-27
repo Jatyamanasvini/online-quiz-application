@@ -94,6 +94,7 @@ export default function Quiz({ quiz, onSubmit, submitting, error, onExit }) {
                     type="radio"
                     name={`question-${current.id}`}
                     value={option.id}
+                    aria-label={`Option ${String.fromCharCode(65 + optionIndex)}: ${option.text}`}
                     checked={isSelected}
                     onChange={() => selectOption(option.id)}
                   />

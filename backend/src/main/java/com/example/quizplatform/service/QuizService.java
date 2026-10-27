@@ -1,8 +1,11 @@
 package com.example.quizplatform.service;
 
 import com.example.quizplatform.domain.AnswerOption;
+import com.example.quizplatform.domain.AppUser;
+import com.example.quizplatform.domain.AttemptAnswer;
 import com.example.quizplatform.domain.Course;
 import com.example.quizplatform.domain.Question;
+import com.example.quizplatform.domain.QuizAttempt;
 import com.example.quizplatform.domain.Topic;
 import com.example.quizplatform.dto.AnswerReview;
 import com.example.quizplatform.dto.CourseSummary;
@@ -18,6 +21,7 @@ import com.example.quizplatform.exception.NotFoundException;
 import com.example.quizplatform.exception.QuizUnavailableException;
 import com.example.quizplatform.repository.CourseRepository;
 import com.example.quizplatform.repository.QuestionRepository;
+import com.example.quizplatform.repository.QuizAttemptRepository;
 import com.example.quizplatform.repository.TopicRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,13 +40,16 @@ public class QuizService {
     private final CourseRepository courseRepository;
     private final TopicRepository topicRepository;
     private final QuestionRepository questionRepository;
+    private final QuizAttemptRepository attemptRepository;
 
     public QuizService(CourseRepository courseRepository,
                        TopicRepository topicRepository,
-                       QuestionRepository questionRepository) {
+                       QuestionRepository questionRepository,
+                       QuizAttemptRepository attemptRepository) {
         this.courseRepository = courseRepository;
         this.topicRepository = topicRepository;
         this.questionRepository = questionRepository;
+        this.attemptRepository = attemptRepository;
     }
 
     @Transactional(readOnly = true)
@@ -111,8 +118,11 @@ public class QuizService {
                 questions.stream().map(this::toQuestionView).toList());
     }
 
+    /**
+     * Scores a submission and persists it as a {@link QuizAttempt} for the given user.
+     */
     @Transactional
-    public QuizResult submit(SubmitQuizRequest request) {
+    public QuizResult submit(SubmitQuizRequest request, AppUser user) {
         if (request == null || request.topicId() == null) {
             throw new BadRequestException("topicId is required");
         }
@@ -142,6 +152,7 @@ public class QuizService {
         int correct = 0;
         int unanswered = 0;
         List<AnswerReview> reviews = new ArrayList<>();
+        List<AttemptAnswer> gradedAnswers = new ArrayList<>();
 
         for (Question question : questions) {
             Long selectedOptionId = selections.get(question.getId());
@@ -176,11 +187,20 @@ public class QuizService {
                     correctOption.getId(),
                     isCorrect,
                     question.getExplanation()));
+
+            gradedAnswers.add(new AttemptAnswer(null, question, selectedOptionId,
+                    correctOption.getId(), isCorrect));
         }
 
         int total = questions.size();
         int incorrect = total - correct;
         double accuracy = Math.round((correct * 1000.0) / total) / 10.0;
+
+        QuizAttempt attempt = new QuizAttempt(user, topic, total, correct, incorrect, unanswered, accuracy);
+        gradedAnswers.forEach(answer -> attempt.addAnswer(new AttemptAnswer(
+                attempt, answer.getQuestion(), answer.getSelectedOptionId(),
+                answer.getCorrectOptionId(), answer.isAnsweredCorrectly())));
+        attemptRepository.save(attempt);
 
         return new QuizResult(
                 topic.getId(),

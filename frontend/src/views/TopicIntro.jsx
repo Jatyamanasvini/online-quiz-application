@@ -1,8 +1,8 @@
 import { ArrowLeftIcon, AlertIcon, PlayIcon } from '../components/Icons.jsx'
 
-export default function TopicIntro({ course, topic, onBack, onStart, starting, error }) {
+export default function TopicIntro({ course, topic, user, onBack, onStart, starting, error }) {
   const available = topic.questionCount > 0
-  const accent = course.accent || '#6366f1'
+  const accent = course.accent || 'var(--accent)'
 
   return (
     <main id="main" className="page page-narrow">
@@ -43,15 +43,22 @@ export default function TopicIntro({ course, topic, onBack, onStart, starting, e
         )}
 
         {available ? (
-          <button
-            type="button"
-            className="btn primary large"
-            onClick={onStart}
-            disabled={starting}
-          >
-            <PlayIcon />
-            {starting ? 'Loading quiz…' : 'Start quiz'}
-          </button>
+          <>
+            {!user && (
+              <p className="notice">
+                You need an account to take this quiz. Your result is saved to your profile.
+              </p>
+            )}
+            <button
+              type="button"
+              className="btn primary large"
+              onClick={onStart}
+              disabled={starting}
+            >
+              <PlayIcon />
+              {starting ? 'Loading quiz…' : user ? 'Start quiz' : 'Log in to start'}
+            </button>
+          </>
         ) : (
           <p className="notice">
             Questions for this topic are coming soon. Pick another topic to practise.

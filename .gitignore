@@ -1,26 +1,14 @@
-# OS / editor
-.DS_Store
-.idea/
-.vscode/
-*.iml
-*.swp
-
-# Logs
-*.log
-logs/
-
-# Environment
-.env
-.env.*
-!.env.example
-*.local
-
-# Frontend
-node_modules/
-frontend/dist/
-frontend/dist-ssr/
-
-# Backend
+# Java / Node / build output
 backend/target/
 backend/data/
-backend/.mvn/wrapper/maven-wrapper.jar
+*.mv.db
+*.trace.db
+frontend/node_modules/
+frontend/dist/
+
+# Local secrets — never commit
+.env
+.env.local
+
+# OS noise
+.DS_Store

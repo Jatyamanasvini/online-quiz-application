@@ -6,9 +6,17 @@ function verdict(accuracy) {
   return 'Keep practising'
 }
 
-export default function Result({ result, course, onRetry, onBackToTopics, onHome }) {
+export default function Result({
+  result,
+  course,
+  onRetry,
+  onBackToTopics,
+  onHome,
+  onBackTo,
+  backLabel,
+}) {
   const percent = Math.round(result.accuracy)
-  const accent = course?.accent || '#6366f1'
+  const accent = course?.accent || 'var(--accent)'
 
   return (
     <main id="main" className="page">
@@ -54,15 +62,26 @@ export default function Result({ result, course, onRetry, onBackToTopics, onHome
           </dl>
 
           <div className="result-actions">
-            <button type="button" className="btn primary" onClick={onRetry}>
-              Try again
-            </button>
-            <button type="button" className="btn ghost" onClick={onBackToTopics}>
-              Back to topics
-            </button>
-            <button type="button" className="btn ghost" onClick={onHome}>
-              All courses
-            </button>
+            {onRetry && (
+              <button type="button" className="btn primary" onClick={onRetry}>
+                Try again
+              </button>
+            )}
+            {onBackToTopics && (
+              <button type="button" className="btn ghost" onClick={onBackToTopics}>
+                Back to topics
+              </button>
+            )}
+            {onBackTo && (
+              <button type="button" className="btn primary" onClick={onBackTo}>
+                {backLabel || 'Back'}
+              </button>
+            )}
+            {onHome && (
+              <button type="button" className="btn ghost" onClick={onHome}>
+                All courses
+              </button>
+            )}
           </div>
         </div>
       </section>

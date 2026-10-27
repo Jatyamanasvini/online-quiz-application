@@ -1,5 +1,6 @@
 const API_BASE = import.meta.env.VITE_API_BASE ?? ''
 const TIMEOUT_MS = 15000
+const TOKEN_KEY = 'quizora-token'
 
 export class ApiError extends Error {
   constructor(message, status = 0) {
@@ -9,14 +10,31 @@ export class ApiError extends Error {
   }
 }
 
+export function getToken() {
+  return window.localStorage.getItem(TOKEN_KEY)
+}
+
+export function setToken(token) {
+  window.localStorage.setItem(TOKEN_KEY, token)
+}
+
+export function clearToken() {
+  window.localStorage.removeItem(TOKEN_KEY)
+}
+
 async function request(path, { method = 'GET', body } = {}) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
 
+  const headers = {}
+  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  const token = getToken()
+  if (token) headers.Authorization = `Bearer ${token}`
+
   try {
     const response = await fetch(`${API_BASE}${path}`, {
       method,
-      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      headers,
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: controller.signal,
     })
@@ -34,6 +52,7 @@ async function request(path, { method = 'GET', body } = {}) {
     if (!response.ok) {
       const message =
         payload?.message || `Request failed with status ${response.status}`
+      if (response.status === 401 && token) clearToken()
       throw new ApiError(message, response.status)
     }
 
@@ -51,6 +70,7 @@ async function request(path, { method = 'GET', body } = {}) {
   }
 }
 
+// Catalogue
 export function fetchCourses() {
   return request('/api/courses')
 }
@@ -68,4 +88,35 @@ export function submitQuiz(topicId, answers) {
     method: 'POST',
     body: { topicId, answers },
   })
+}
+
+// Auth
+export function login(email, password) {
+  return request('/api/auth/login', { method: 'POST', body: { email, password } })
+}
+
+export function register(name, email, password) {
+  return request('/api/auth/register', { method: 'POST', body: { name, email, password } })
+}
+
+export function fetchMe() {
+  return request('/api/auth/me')
+}
+
+// Attempts
+export function fetchMyAttempts() {
+  return request('/api/attempts/my')
+}
+
+export function fetchAttempt(attemptId) {
+  return request(`/api/attempts/${attemptId}`)
+}
+
+// Teacher
+export function fetchTeacherAttempts() {
+  return request('/api/teacher/attempts')
+}
+
+export function fetchTeacherStats() {
+  return request('/api/teacher/stats')
 }

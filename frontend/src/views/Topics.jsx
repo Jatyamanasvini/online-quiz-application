@@ -10,7 +10,7 @@ export default function Topics({ course, onBack, onSelectTopic }) {
     [course.id],
   )
   const topics = data ?? []
-  const accent = course.accent || '#6366f1'
+  const accent = course.accent || 'var(--accent)'
 
   return (
     <main id="main" className="page">

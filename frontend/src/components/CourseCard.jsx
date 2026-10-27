@@ -1,7 +1,7 @@
 import { ArrowRightIcon } from './Icons.jsx'
 
 export default function CourseCard({ course, index, onSelect }) {
-  const accent = course.accent || '#6366f1'
+  const accent = course.accent || 'var(--accent)'
 
   return (
     <button

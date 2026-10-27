@@ -122,7 +122,7 @@ class QuizApiIntegrationTest {
         List<Map<String, Object>> answers = correctAnswers(topicId);
 
         HttpResponse<String> response = post("/api/quizzes/submit",
-                submitBody(topicId, answers));
+                submitBody(topicId, answers), studentToken());
 
         assertEquals(200, response.statusCode());
         JsonNode result = objectMapper.readTree(response.body());
@@ -150,7 +150,7 @@ class QuizApiIntegrationTest {
             wrongAnswers.add(answer(questionId, firstIncorrectOption(topicId, questionId)));
         }
 
-        HttpResponse<String> response = post("/api/quizzes/submit", submitBody(topicId, wrongAnswers));
+        HttpResponse<String> response = post("/api/quizzes/submit", submitBody(topicId, wrongAnswers), studentToken());
 
         assertEquals(200, response.statusCode());
         JsonNode result = objectMapper.readTree(response.body());
@@ -167,7 +167,7 @@ class QuizApiIntegrationTest {
         List<Map<String, Object>> partial = new ArrayList<>();
         partial.add(answer(questionIdAt(topicId, 0), correctOptionFor(topicId, 0)));
 
-        HttpResponse<String> response = post("/api/quizzes/submit", submitBody(topicId, partial));
+        HttpResponse<String> response = post("/api/quizzes/submit", submitBody(topicId, partial), studentToken());
 
         assertEquals(200, response.statusCode());
         JsonNode result = objectMapper.readTree(response.body());
@@ -187,7 +187,7 @@ class QuizApiIntegrationTest {
         long optionOfAnotherQuestion = correct.get(questionIds.get(1));
         String body = submitBody(topicId, List.of(answer(questionIds.get(0), optionOfAnotherQuestion)));
 
-        HttpResponse<String> response = post("/api/quizzes/submit", body);
+        HttpResponse<String> response = post("/api/quizzes/submit", body, studentToken());
 
         assertEquals(400, response.statusCode());
         assertTrue(response.body().contains("does not belong to question"));
@@ -200,7 +200,7 @@ class QuizApiIntegrationTest {
         long foreignQuestion = questionIds(pythonTopic).get(0);
 
         HttpResponse<String> response = post("/api/quizzes/submit",
-                submitBody(javaTopic, List.of(answer(foreignQuestion, null))));
+                submitBody(javaTopic, List.of(answer(foreignQuestion, null))), studentToken());
 
         assertEquals(400, response.statusCode());
         assertTrue(response.body().contains("does not belong to topic"));
@@ -212,14 +212,14 @@ class QuizApiIntegrationTest {
         long questionId = questionIds(topicId).get(0);
 
         HttpResponse<String> duplicate = post("/api/quizzes/submit",
-                submitBody(topicId, List.of(answer(questionId, null), answer(questionId, null))));
+                submitBody(topicId, List.of(answer(questionId, null), answer(questionId, null))), studentToken());
         assertEquals(400, duplicate.statusCode());
         assertTrue(duplicate.body().contains("Duplicate answer"));
 
-        HttpResponse<String> missingTopic = post("/api/quizzes/submit", "{\"answers\":[]}");
+        HttpResponse<String> missingTopic = post("/api/quizzes/submit", "{\"answers\":[]}", studentToken());
         assertEquals(400, missingTopic.statusCode());
 
-        HttpResponse<String> malformed = post("/api/quizzes/submit", "{not json");
+        HttpResponse<String> malformed = post("/api/quizzes/submit", "{not json", studentToken());
         assertEquals(400, malformed.statusCode());
     }
 
@@ -231,29 +231,158 @@ class QuizApiIntegrationTest {
         assertEquals(409, quiz.statusCode());
         assertTrue(quiz.body().contains("No questions"));
 
-        HttpResponse<String> submit = post("/api/quizzes/submit", submitBody(topicId, List.of()));
+        HttpResponse<String> submit = post("/api/quizzes/submit", submitBody(topicId, List.of()), studentToken());
         assertEquals(409, submit.statusCode());
     }
 
     @Test
     void unknownTopicReturns404() throws Exception {
         assertEquals(404, get("/api/topics/999999/quiz").statusCode());
-        assertEquals(404, post("/api/quizzes/submit", submitBody(999999L, List.of())).statusCode());
+        assertEquals(404, post("/api/quizzes/submit", submitBody(999999L, List.of()), studentToken()).statusCode());
+    }
+
+    @Test
+    void requiresAuthenticationToSubmit() throws Exception {
+        long topicId = topicId("java-basics");
+        HttpResponse<String> response = post("/api/quizzes/submit", submitBody(topicId, List.of()));
+
+        assertEquals(401, response.statusCode());
+        assertTrue(response.body().contains("Authentication is required"));
+    }
+
+    @Test
+    void registerLoginAndMeFlowWorks() throws Exception {
+        HttpResponse<String> registered = post("/api/auth/register",
+                "{\"name\":\"Flow User\",\"email\":\"flow@test.local\",\"password\":\"secret123\"}");
+        assertEquals(200, registered.statusCode());
+        JsonNode auth = objectMapper.readTree(registered.body());
+        assertTrue(auth.get("token").asText().length() > 20);
+        assertEquals("STUDENT", auth.get("user").get("role").asText());
+        assertEquals("flow@test.local", auth.get("user").get("email").asText());
+
+        HttpResponse<String> login = post("/api/auth/login",
+                "{\"email\":\"flow@test.local\",\"password\":\"secret123\"}");
+        assertEquals(200, login.statusCode());
+
+        String token = auth.get("token").asText();
+        HttpResponse<String> me = get("/api/auth/me", token);
+        assertEquals(200, me.statusCode());
+        assertEquals("Flow User", objectMapper.readTree(me.body()).get("name").asText());
+
+        assertEquals(409, post("/api/auth/register",
+                "{\"name\":\"Again\",\"email\":\"flow@test.local\",\"password\":\"secret123\"}").statusCode());
+
+        assertEquals(401, post("/api/auth/login",
+                "{\"email\":\"flow@test.local\",\"password\":\"wrong-pass\"}").statusCode());
+    }
+
+    @Test
+    void submissionIsPersistedForStudentAndTeacher() throws Exception {
+        long topicId = topicId("java-basics");
+        HttpResponse<String> submitted = post("/api/quizzes/submit",
+                submitBody(topicId, correctAnswers(topicId)), studentToken());
+        assertEquals(200, submitted.statusCode());
+
+        HttpResponse<String> mine = get("/api/attempts/my", studentToken());
+        assertEquals(200, mine.statusCode());
+        JsonNode attempts = objectMapper.readTree(mine.body());
+        assertTrue(attempts.size() >= 1, "student should see at least one attempt");
+        boolean foundBasics = false;
+        for (JsonNode attempt : attempts) {
+            if ("Basics".equals(attempt.get("topicTitle").asText())) {
+                foundBasics = true;
+            }
+        }
+        assertTrue(foundBasics, "attempt list should include the submitted topic");
+
+        String teacher = teacherToken();
+        HttpResponse<String> all = get("/api/teacher/attempts", teacher);
+        assertEquals(200, all.statusCode());
+        assertTrue(all.body().contains("IT Student"), "teacher view should include the student name");
+
+        HttpResponse<String> stats = get("/api/teacher/stats", teacher);
+        assertEquals(200, stats.statusCode());
+        assertTrue(stats.body().contains("Basics"));
+
+        assertEquals(403, get("/api/teacher/stats", studentToken()).statusCode());
+        assertEquals(403, get("/api/teacher/attempts", studentToken()).statusCode());
+        assertEquals(401, get("/api/teacher/attempts").statusCode());
+        assertEquals(401, get("/api/attempts/my").statusCode());
+    }
+
+    @Test
+    void studentsCannotReadEachOthersAttempts() throws Exception {
+        long topicId = topicId("python-basics");
+        assertEquals(200, post("/api/quizzes/submit",
+                submitBody(topicId, correctAnswers(topicId)), studentToken()).statusCode());
+
+        JsonNode attempts = objectMapper.readTree(get("/api/attempts/my", studentToken()).body());
+        long attemptId = attempts.get(0).get("id").asLong();
+
+        assertEquals(200, get("/api/attempts/" + attemptId, studentToken()).statusCode());
+
+        HttpResponse<String> other = post("/api/auth/register",
+                "{\"name\":\"Other User\",\"email\":\"other@test.local\",\"password\":\"secret123\"}");
+        assertEquals(200, other.statusCode());
+        String otherToken = objectMapper.readTree(other.body()).get("token").asText();
+
+        assertEquals(403, get("/api/attempts/" + attemptId, otherToken).statusCode());
+        assertEquals(200, get("/api/attempts/" + attemptId, teacherToken()).statusCode());
     }
 
     private HttpResponse<String> get(String path) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
-                .GET()
-                .build();
-        return http.send(request, HttpResponse.BodyHandlers.ofString());
+        return get(path, null);
+    }
+
+    private HttpResponse<String> get(String path, String token) throws Exception {
+        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+                .GET();
+        if (token != null) {
+            builder.header("Authorization", "Bearer " + token);
+        }
+        return http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 
     private HttpResponse<String> post(String path, String json) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+        return post(path, json, null);
+    }
+
+    private HttpResponse<String> post(String path, String json, String token) throws Exception {
+        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(json))
-                .build();
-        return http.send(request, HttpResponse.BodyHandlers.ofString());
+                .POST(HttpRequest.BodyPublishers.ofString(json));
+        if (token != null) {
+            builder.header("Authorization", "Bearer " + token);
+        }
+        return http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private static String studentToken;
+    private static String teacherToken;
+
+    private String studentToken() throws Exception {
+        if (studentToken == null) {
+            HttpResponse<String> response = post("/api/auth/register",
+                    "{\"name\":\"IT Student\",\"email\":\"it.student@test.local\",\"password\":\"secret123\"}");
+            if (response.statusCode() != 200) {
+                // Already registered by an earlier test method in this context — log in instead.
+                response = post("/api/auth/login",
+                        "{\"email\":\"it.student@test.local\",\"password\":\"secret123\"}");
+            }
+            assertEquals(200, response.statusCode(), "student authentication must succeed");
+            studentToken = objectMapper.readTree(response.body()).get("token").asText();
+        }
+        return studentToken;
+    }
+
+    private String teacherToken() throws Exception {
+        if (teacherToken == null) {
+            HttpResponse<String> response = post("/api/auth/login",
+                    "{\"email\":\"teacher@quizora.local\",\"password\":\"teacher123\"}");
+            assertEquals(200, response.statusCode(), "teacher login must succeed");
+            teacherToken = objectMapper.readTree(response.body()).get("token").asText();
+        }
+        return teacherToken;
     }
 
     private long courseId(String code) {
