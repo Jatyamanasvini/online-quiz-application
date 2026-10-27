@@ -3,6 +3,7 @@ package com.example.quizplatform.security;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -33,6 +34,9 @@ public class SecurityConfig {
         http
                 // Stateless JWT API: no session, so CSRF does not apply.
                 .csrf(csrf -> csrf.disable())
+                // The frontend is hosted on a different origin (Vercel), so preflight requests
+                // must be answered from the CorsConfigurationSource bean.
+                .cors(Customizer.withDefaults())
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
@@ -41,6 +45,7 @@ public class SecurityConfig {
                         .accessDeniedHandler(jsonAuthHandlers))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/h2-console/**").permitAll()
+                        .requestMatchers(HttpMethod.OPTIONS, "/api/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/courses/**", "/api/topics/**").permitAll()
                         .requestMatchers("/api/teacher/**").hasRole("TEACHER")

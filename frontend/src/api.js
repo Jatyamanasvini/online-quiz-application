@@ -1,6 +1,12 @@
 const API_BASE = import.meta.env.VITE_API_BASE ?? ''
-const TIMEOUT_MS = 15000
+// Render's free tier can take ~40s to wake from idle, so the timeout is generous.
+const TIMEOUT_MS = 45000
 const TOKEN_KEY = 'quizora-token'
+
+// Fired when the server rejects a stored token so the auth provider can drop the
+// in-memory user as well; otherwise the header still looks logged in while every
+// request fails with 401.
+export const AUTH_EXPIRED_EVENT = 'quizora:auth-expired'
 
 export class ApiError extends Error {
   constructor(message, status = 0) {
@@ -52,7 +58,10 @@ async function request(path, { method = 'GET', body } = {}) {
     if (!response.ok) {
       const message =
         payload?.message || `Request failed with status ${response.status}`
-      if (response.status === 401 && token) clearToken()
+      if (response.status === 401 && token) {
+        clearToken()
+        window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT))
+      }
       throw new ApiError(message, response.status)
     }
 

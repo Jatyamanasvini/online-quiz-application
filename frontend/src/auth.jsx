@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
+  AUTH_EXPIRED_EVENT,
   clearToken,
   fetchMe,
   getToken,
@@ -33,6 +34,17 @@ export function AuthProvider({ children }) {
     return () => {
       cancelled = true
     }
+  }, [])
+
+  // The API layer clears the stored token when the server rejects it (expired or
+  // revoked). Mirror that in React state so the header returns to "Log in" too.
+  useEffect(() => {
+    const handleExpired = () => {
+      setUser(null)
+      setReady(true)
+    }
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleExpired)
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleExpired)
   }, [])
 
   const login = async (email, password) => {

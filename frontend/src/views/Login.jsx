@@ -2,6 +2,12 @@ import { useState } from 'react'
 import { useAuth } from '../auth-context.js'
 import { AlertIcon } from '../components/Icons.jsx'
 
+// Demo credentials are shown during local development, and in production only when
+// explicitly enabled (VITE_SHOW_DEMO_CREDENTIALS=true) — a public URL should not
+// advertise them.
+const showDemoAccounts =
+  import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO_CREDENTIALS === 'true'
+
 export default function Login({ onDone }) {
   const { login, register } = useAuth()
   const [mode, setMode] = useState('login')
@@ -120,17 +126,19 @@ export default function Login({ onDone }) {
           </button>
         </form>
 
-        <div className="demo-box">
-          <p>
-            <strong>Demo accounts</strong>
-          </p>
-          <p>
-            <code>teacher@quizora.local</code> · <code>teacher123</code> — teacher dashboard
-          </p>
-          <p>
-            <code>student@quizora.local</code> · <code>student123</code> — student
-          </p>
-        </div>
+        {showDemoAccounts && (
+          <div className="demo-box">
+            <p>
+              <strong>Demo accounts</strong>
+            </p>
+            <p>
+              <code>teacher@quizora.local</code> · <code>teacher123</code> — teacher dashboard
+            </p>
+            <p>
+              <code>student@quizora.local</code> · <code>student123</code> — student
+            </p>
+          </div>
+        )}
       </section>
     </main>
   )

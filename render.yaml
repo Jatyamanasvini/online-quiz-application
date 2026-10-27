@@ -1,0 +1,32 @@
+# Render Blueprint — API only. The frontend is deployed on Vercel and the database
+# is a managed MySQL instance on Aiven. See DEPLOY.md for the full walkthrough.
+services:
+  - type: web
+    name: quizora-api
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /api/courses
+    autoDeployTrigger: commit
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: mysql
+      # Aiven MySQL service URI converted to JDBC, TLS required.
+      - key: DB_URL
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      # Render generates a strong signing key once and keeps it across deploys.
+      - key: JWT_SECRET
+        generateValue: true
+      # Set to the Vercel URL after the first frontend deploy, then redeploy.
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      # Change the demo teacher password before the first start (the seeder only runs
+      # on an empty user table).
+      - key: SEED_TEACHER_PASSWORD
+        sync: false

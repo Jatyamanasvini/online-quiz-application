@@ -251,6 +251,29 @@ class QuizApiIntegrationTest {
     }
 
     @Test
+    void corsAllowsOnlyConfiguredOrigins() throws Exception {
+        HttpResponse<String> allowed = preflight("http://localhost:5173");
+        assertEquals(200, allowed.statusCode());
+        assertEquals("http://localhost:5173",
+                allowed.headers().firstValue("Access-Control-Allow-Origin").orElse(null));
+
+        HttpResponse<String> rejected = preflight("https://evil.example");
+        assertEquals(403, rejected.statusCode());
+        assertTrue(rejected.headers().firstValue("Access-Control-Allow-Origin").isEmpty());
+    }
+
+    private HttpResponse<String> preflight(String origin) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(
+                        URI.create("http://localhost:" + port + "/api/auth/login"))
+                .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
+                .header("Origin", origin)
+                .header("Access-Control-Request-Method", "POST")
+                .header("Access-Control-Request-Headers", "content-type")
+                .build();
+        return http.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    @Test
     void registerLoginAndMeFlowWorks() throws Exception {
         HttpResponse<String> registered = post("/api/auth/register",
                 "{\"name\":\"Flow User\",\"email\":\"flow@test.local\",\"password\":\"secret123\"}");

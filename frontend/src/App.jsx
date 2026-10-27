@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchAttempt, fetchQuiz, submitQuiz } from './api.js'
+import { AUTH_EXPIRED_EVENT, fetchAttempt, fetchQuiz, submitQuiz } from './api.js'
 import { useAuth } from './auth-context.js'
 import { useTheme } from './hooks.js'
 import ThemeToggle from './components/ThemeToggle.jsx'
@@ -38,16 +38,34 @@ export default function App() {
     window.scrollTo(0, 0)
   }, [route.view, route.topic?.id])
 
-  const goHome = () => setRoute({ view: 'home' })
+  // An expired or rejected token logs the user out in the auth provider; send them
+  // home instead of leaving a protected view (e.g. a saved review) on screen.
+  useEffect(() => {
+    const handleExpired = () => {
+      setPendingRoute(null)
+      setAttemptError(null)
+      setRoute({ view: 'home' })
+    }
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleExpired)
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleExpired)
+  }, [])
 
-  const openCourse = (course) => setRoute({ view: 'topics', course })
+  // Every in-app navigation drops errors that belonged to the previous view.
+  const navigate = (next) => {
+    setAttemptError(null)
+    setRoute(next)
+  }
+
+  const goHome = () => navigate({ view: 'home' })
+
+  const openCourse = (course) => navigate({ view: 'topics', course })
 
   const openTopic = (topic) =>
-    setRoute((previous) => ({ ...previous, view: 'intro', topic, result: null }))
+    navigate((previous) => ({ ...previous, view: 'intro', topic, result: null }))
 
   const requireLogin = (returnTo) => {
     setPendingRoute(returnTo)
-    setRoute({ view: 'login' })
+    navigate({ view: 'login' })
   }
 
   const startQuiz = async (topic, course) => {
@@ -61,7 +79,7 @@ export default function App() {
     try {
       const quiz = await fetchQuiz(topic.id)
       setAttempt((value) => value + 1)
-      setRoute({ view: 'quiz', course, topic, quiz })
+      navigate({ view: 'quiz', course, topic, quiz })
     } catch (error) {
       setStartError(error)
     } finally {
@@ -74,7 +92,7 @@ export default function App() {
     setSubmitError(null)
     try {
       const result = await submitQuiz(route.topic.id, answers)
-      setRoute((previous) => ({
+      navigate((previous) => ({
         view: 'result',
         course: previous.course,
         topic: previous.topic,
@@ -91,7 +109,7 @@ export default function App() {
     setAttemptError(null)
     try {
       const result = await fetchAttempt(attemptId)
-      setRoute({
+      navigate({
         view: 'attempt-review',
         result,
         backTo: user?.role === 'TEACHER' ? 'dashboard' : 'attempts',
@@ -131,7 +149,7 @@ export default function App() {
                 <button
                   type="button"
                   className="btn ghost small"
-                  onClick={() => setRoute({ view: 'dashboard' })}
+                  onClick={() => navigate({ view: 'dashboard' })}
                 >
                   Dashboard
                 </button>
@@ -139,7 +157,7 @@ export default function App() {
                 <button
                   type="button"
                   className="btn ghost small"
-                  onClick={() => setRoute({ view: 'attempts' })}
+                  onClick={() => navigate({ view: 'attempts' })}
                 >
                   My attempts
                 </button>
@@ -177,21 +195,21 @@ export default function App() {
       {route.view === 'home' && <Home onSelectCourse={openCourse} />}
 
       {route.view === 'login' && (
-        <Login onDone={() => setRoute(pendingRoute ?? { view: 'home' })} />
+        <Login onDone={() => navigate(pendingRoute ?? { view: 'home' })} />
       )}
 
       {route.view === 'attempts' &&
         (user ? (
           <MyAttempts onBack={goHome} onOpenAttempt={openAttempt} />
         ) : (
-          <Login onDone={() => setRoute({ view: 'attempts' })} />
+          <Login onDone={() => navigate({ view: 'attempts' })} />
         ))}
 
       {route.view === 'dashboard' &&
         (user?.role === 'TEACHER' ? (
           <Dashboard user={user} onBack={goHome} onOpenAttempt={openAttempt} />
         ) : (
-          <Login onDone={() => setRoute({ view: 'dashboard' })} />
+          <Login onDone={() => navigate({ view: 'dashboard' })} />
         ))}
 
       {route.view === 'topics' && (
@@ -206,7 +224,7 @@ export default function App() {
           starting={starting}
           error={startError}
           onStart={() => startQuiz(route.topic, route.course)}
-          onBack={() => setRoute({ view: 'topics', course: route.course })}
+          onBack={() => navigate({ view: 'topics', course: route.course })}
         />
       )}
 
@@ -218,7 +236,7 @@ export default function App() {
           error={submitError}
           onSubmit={handleSubmit}
           onExit={() =>
-            setRoute({ view: 'intro', course: route.course, topic: route.topic })
+            navigate({ view: 'intro', course: route.course, topic: route.topic })
           }
         />
       )}
@@ -228,7 +246,7 @@ export default function App() {
           result={route.result}
           course={route.course}
           onRetry={() => startQuiz(route.topic, route.course)}
-          onBackToTopics={() => setRoute({ view: 'topics', course: route.course })}
+          onBackToTopics={() => navigate({ view: 'topics', course: route.course })}
           onHome={goHome}
         />
       )}
@@ -237,7 +255,7 @@ export default function App() {
         <Result
           result={route.result}
           course={null}
-          onBackTo={() => setRoute({ view: route.backTo })}
+          onBackTo={() => navigate({ view: route.backTo })}
           backLabel={route.backTo === 'dashboard' ? 'Back to dashboard' : 'Back to my attempts'}
           onHome={goHome}
         />

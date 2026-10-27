@@ -56,9 +56,22 @@ npm run dev
 
 Open <http://localhost:5173>. Vite proxies `/api` to `http://localhost:8080`.
 
+### Deploy
+
+Production target: React on **Vercel**, Spring Boot (Docker) on **Render**, MySQL on **Aiven**.
+Step-by-step instructions, environment variables and a verification checklist live in
+[`DEPLOY.md`](DEPLOY.md); the deploy configs are [`render.yaml`](render.yaml),
+[`backend/Dockerfile`](backend/Dockerfile) and [`frontend/vercel.json`](frontend/vercel.json).
+
 ### Switch to MySQL
 
-The app is already wired for MySQL; only credentials are missing on this machine.
+MySQL is **optional**. The default profile runs on H2 and needs no database server or
+password, so you can skip this section entirely for local use. MySQL is only needed when you
+want to rehearse the production setup.
+
+There is no built-in/default MySQL password, and an existing `root` password cannot be
+recovered — only reset. Use whatever admin login you already have (for example a password
+manager entry or the account you created when installing MySQL), then create the app user:
 
 ```bash
 mysql -u root -p -e "CREATE DATABASE quizdb CHARACTER SET utf8mb4;
@@ -123,6 +136,11 @@ JWT_SECRET='a-long-random-production-secret-at-least-48-bytes' ./mvnw spring-boo
   carries the bearer token.
 - Authorization is enforced on the server per route; the frontend only hides UI it knows the
   role cannot use.
+- A separately hosted frontend is allowed through CORS: `CORS_ALLOWED_ORIGINS` is a
+  comma-separated list (default `http://localhost:5173`), and it must include the Vercel URL in
+  production.
+- Demo account passwords are seeded from `SEED_TEACHER_PASSWORD` / `SEED_STUDENT_PASSWORD`
+  (defaults `teacher123` / `student123`) and only when the user table is empty.
 
 ## Seeded content
 
@@ -156,7 +174,7 @@ frontend/
 ## Checks
 
 ```bash
-cd backend && ./mvnw test        # 18 integration tests
+cd backend && ./mvnw test        # 19 tests (integration + context)
 cd frontend && npm run build && npm run lint
 ```
 
